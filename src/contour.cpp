@@ -28,11 +28,10 @@
 
 #include <stdio.h>
 
-#define CVX_RED		CV_RGB(0xff,0x00,0x00)
-#define CVX_GREEN	CV_RGB(0x00,0xff,0x00)
-#define CVX_BLUE	CV_RGB(0x00,0x00,0xff)
+#define RED	CV_RGB(0xff,0x00,0x00)
+#define GREEN	CV_RGB(0x00,0xff,0x00)
+#define BLUE	CV_RGB(0x00,0x00,0xff)
 
-// helper function:
 // finds a cosine of angle between vectors
 // from pt0->pt1 and from pt0->pt2 
 double
@@ -46,13 +45,21 @@ angle(CvPoint * pt1, CvPoint * pt2, CvPoint * pt0)
             dy1 * dy1) * (dx2 * dx2 + dy2 * dy2) + 1e-10);
 }
 
+int high_switch_value = 4;
+float perimeter_constant = high_switch_value/100.0;
+int low_switch_value = 10000;
+float minimum_area = low_switch_value;
 
-//  Example 8-3. Finding and drawing contours on an input image
+void switch_callback_h( int position ){
+	perimeter_constant = position/100.0;
+}
+void switch_callback_l( int position ){
+	minimum_area = position;
+}
+
+
 int main(int argc, char* argv[]) {
-
-    cvNamedWindow( argv[0], 0 );
     IplImage* img_8uc1 = NULL;
-  
     if( argc != 2 || !(img_8uc1 = cvLoadImage( argv[1], CV_LOAD_IMAGE_GRAYSCALE )) ){
         printf("%s image\n",argv[0]);
         return -1;
@@ -64,72 +71,65 @@ int main(int argc, char* argv[]) {
     cvThreshold( img_8uc1, img_edge, 128, 255, CV_THRESH_BINARY );
     CvMemStorage* storage = cvCreateMemStorage();
     CvSeq* first_contour = NULL;
-    int Nc = cvFindContours(
+    cvFindContours(
        img_edge,
        storage,
        &first_contour,
        sizeof(CvContour),
        CV_RETR_CCOMP
     );
-    int n=0,k;
-    printf( "Total Contours Detected: %d\n", Nc );
-    cvCvtColor( img_8uc1, img_8uc3, CV_GRAY2BGR );
-    CvSeq* contours=first_contour;
-    while (contours) {
-       double area;
-       area=fabs(cvContourArea(contours, CV_WHOLE_SEQ));
-       if(area < 10000.0) {
-           contours = contours->h_next;
-           continue;
-       }
-       printf("area:%f\n",area);
-       CvSeq *result;
-       double s,t;
+    const char* name = "Edge Detection Window";
+    cvNamedWindow( name, 0 );
+    cvCreateTrackbar( "Contour perimeter", name, &high_switch_value, 10, switch_callback_h );
+    cvCreateTrackbar( "Min area", name, &low_switch_value, 100000, switch_callback_l );
 
-       // approximate contour with accuracy proportional
-       // to the contour perimeter
+    while(1) {
+       int n=0;
+       cvCvtColor( img_8uc1, img_8uc3, CV_GRAY2BGR );
+       CvSeq* contours=first_contour;
+       while (contours) {
+           double area=fabs(cvContourArea(contours, CV_WHOLE_SEQ));
+           if(area < minimum_area) {
+               contours = contours->h_next;
+               continue;
+           }
+           CvSeq *result;
+           double s,t;
 
-       /********** IMPOTANT NUMBER TO TUNE **************/
-       result = cvApproxPoly(contours, sizeof(CvContour), storage,
-           CV_POLY_APPROX_DP, cvContourPerimeter(contours) * 0.05, 0);
+           result = cvApproxPoly(contours, sizeof(CvContour), storage,
+               CV_POLY_APPROX_DP, cvContourPerimeter(contours) * perimeter_constant, 0);
 
-       // square contours should have 4 vertices after approximation
-       // relatively large area (to filter out noisy contours)
-       // and be convex.
-       // Note: absolute value of an area is used because
-       // area may be positive or negative - in accordance with the
-       // contour orientation
-       if (result->total == 4 && cvCheckContourConvexity(result)) {
-           s = 0;
-           int i;
-           for (i = 0; i < 5; i++) {
-               // find minimum angle between joint
-               // edges (maximum of cosine)
-               if (i >= 2) {
-                   t = fabs(angle(
-                       (CvPoint *) cvGetSeqElem(result, i),
-                       (CvPoint *) cvGetSeqElem(result, i - 2),
-                       (CvPoint *) cvGetSeqElem(result, i - 1)));
-                   s = s > t ? s : t;
-               }
-            }
-	    // if cosines of all angles are small
-	    // (all angles are ~90 degree) then write quandrange
-	    // vertices to resultant sequence 
-            cvDrawContours(img_8uc3, contours, CVX_RED, CVX_BLUE, 0, 2, 8);
-	    printf("s=%f\n",s);
-	    if (s < 0.3) {
-		/*for (i = 0; i < 4; i++) {
+           if (result->total == 4 && cvCheckContourConvexity(result)) {
+               s = 0;
+               int i;
+               for (i = 0; i < 5; i++) {
+                   // find minimum angle between joint
+                   // edges (maximum of cosine)
+                   if (i >= 2) {
+                       t = fabs(angle(
+                           (CvPoint *) cvGetSeqElem(result, i),
+                           (CvPoint *) cvGetSeqElem(result, i - 2),
+                           (CvPoint *) cvGetSeqElem(result, i - 1)));
+                       s = s > t ? s : t;
+                   }
+                }
+                // if cosines of all angles are small
+                // (all angles are ~90 degree) then write quandrange
+                // vertices to resultant sequence 
+                cvDrawContours(img_8uc3, contours, RED, BLUE, 0, 2, 8);
+                // printf("s=%f\n",s);
+	        if (s < 0.3) {
+	  	/*for (i = 0; i < 4; i++) {
 		    cvSeqPush(squares,(CvPoint *) cvGetSeqElem(result, i));
 	        }*/
+                }
             }
+            contours = contours->h_next;
+            n++;
         }
-        cvShowImage( argv[0], img_8uc3 );
-        contours = contours->h_next;
-        n++;
+        cvShowImage( name, img_8uc3 );
+        cvWaitKey(20);
     }
-    cvShowImage( argv[0], img_8uc3 );
-    cvWaitKey(0);
     cvDestroyWindow( argv[0] );
     cvReleaseImage( &img_8uc1 );
     cvReleaseImage( &img_8uc3 );
