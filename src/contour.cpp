@@ -45,51 +45,64 @@ angle(CvPoint * pt1, CvPoint * pt2, CvPoint * pt0)
             dy1 * dy1) * (dx2 * dx2 + dy2 * dy2) + 1e-10);
 }
 
-int high_switch_value = 4;
-float perimeter_constant = high_switch_value/100.0;
-int low_switch_value = 10000;
-float minimum_area = low_switch_value;
+int high_switch_value = 35;
+float perimeter_constant = high_switch_value/1000.0;
+int minimum_area= 600.0;
+int maximum_area= 6000.0;
 
 void switch_callback_h( int position ){
-	perimeter_constant = position/100.0;
-}
-void switch_callback_l( int position ){
-	minimum_area = position;
+	perimeter_constant = position/1000.0;
 }
 
 
 int main(int argc, char* argv[]) {
     IplImage* img_8uc1 = NULL;
+
+
+#ifdef IMAGE
     if( argc != 2 || !(img_8uc1 = cvLoadImage( argv[1], CV_LOAD_IMAGE_GRAYSCALE )) ){
         printf("%s image\n",argv[0]);
         return -1;
     }
+#else
+    CvCapture* capture = cvCreateFileCapture( argv[1] );
+    IplImage* frame;
+    if( argc != 2 || !(frame = cvQueryFrame( capture )) ){
+        printf("%s image\n",argv[0]);
+        return -1;
+    }
+#endif
   
-  
-    IplImage* img_edge = cvCreateImage( cvGetSize(img_8uc1), 8, 1 );
-    IplImage* img_8uc3 = cvCreateImage( cvGetSize(img_8uc1), 8, 3 );
-    cvThreshold( img_8uc1, img_edge, 128, 255, CV_THRESH_BINARY );
-    CvMemStorage* storage = cvCreateMemStorage();
-    CvSeq* first_contour = NULL;
-    cvFindContours(
-       img_edge,
-       storage,
-       &first_contour,
-       sizeof(CvContour),
-       CV_RETR_CCOMP
-    );
     const char* name = "Edge Detection Window";
     cvNamedWindow( name, 0 );
-    cvCreateTrackbar( "Contour perimeter", name, &high_switch_value, 10, switch_callback_h );
-    cvCreateTrackbar( "Min area", name, &low_switch_value, 100000, switch_callback_l );
+    cvCreateTrackbar( "Contour perimeter", name, &high_switch_value, 100, switch_callback_h );
+    cvCreateTrackbar( "Min area", name, &minimum_area, 100000, NULL);
+    cvCreateTrackbar( "Max area", name, &maximum_area, 100000, NULL);
 
     while(1) {
+        frame = cvQueryFrame( capture );
+        img_8uc1=cvCreateImage( cvGetSize(frame), 8, 1 );
+        cvCvtColor(frame,img_8uc1,CV_BGR2GRAY);
+
+        IplImage* img_edge = cvCreateImage( cvGetSize(img_8uc1), 8, 1 );
+        IplImage* img_8uc3 = cvCreateImage( cvGetSize(img_8uc1), 8, 3 );
+        cvThreshold( img_8uc1, img_edge, 128, 255, CV_THRESH_BINARY );
+        CvMemStorage* storage = cvCreateMemStorage();
+        CvSeq* first_contour = NULL;
+        cvFindContours(
+           img_edge,
+           storage,
+           &first_contour,
+           sizeof(CvContour),
+           CV_RETR_CCOMP
+       );
+
        int n=0;
        cvCvtColor( img_8uc1, img_8uc3, CV_GRAY2BGR );
        CvSeq* contours=first_contour;
        while (contours) {
            double area=fabs(cvContourArea(contours, CV_WHOLE_SEQ));
-           if(area < minimum_area) {
+           if(area < minimum_area || area > maximum_area) {
                contours = contours->h_next;
                continue;
            }
@@ -113,12 +126,12 @@ int main(int argc, char* argv[]) {
                        s = s > t ? s : t;
                    }
                 }
+                cvDrawContours(img_8uc3, contours, RED, BLUE, 0, 2, 8);
                 // if cosines of all angles are small
                 // (all angles are ~90 degree) then write quandrange
                 // vertices to resultant sequence 
-                cvDrawContours(img_8uc3, contours, RED, BLUE, 0, 2, 8);
                 // printf("s=%f\n",s);
-	        if (s < 0.3) {
+	        if (s > 0.3) {
 	  	/*for (i = 0; i < 4; i++) {
 		    cvSeqPush(squares,(CvPoint *) cvGetSeqElem(result, i));
 	        }*/
@@ -128,12 +141,12 @@ int main(int argc, char* argv[]) {
             n++;
         }
         cvShowImage( name, img_8uc3 );
-        cvWaitKey(20);
+        cvWaitKey(200);
+        cvReleaseImage( &img_8uc3 );
+        cvReleaseImage( &img_edge );
+        cvReleaseImage( &img_8uc1 );
     }
     cvDestroyWindow( argv[0] );
-    cvReleaseImage( &img_8uc1 );
-    cvReleaseImage( &img_8uc3 );
-    cvReleaseImage( &img_edge );
     return 0;
 }
 
