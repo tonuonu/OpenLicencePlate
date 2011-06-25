@@ -80,10 +80,11 @@ int main(int argc, char* argv[]) {
     cvCreateTrackbar( "Max area", name, &maximum_area, 100000, NULL);
 
     while(1) {
+#ifndef IMAGE
         frame = cvQueryFrame( capture );
         img_8uc1=cvCreateImage( cvGetSize(frame), 8, 1 );
         cvCvtColor(frame,img_8uc1,CV_BGR2GRAY);
-
+#endif
         IplImage* img_edge = cvCreateImage( cvGetSize(img_8uc1), 8, 1 );
         IplImage* img_8uc3 = cvCreateImage( cvGetSize(img_8uc1), 8, 3 );
         cvThreshold( img_8uc1, img_edge, 128, 255, CV_THRESH_BINARY );
@@ -144,7 +145,9 @@ int main(int argc, char* argv[]) {
         cvWaitKey(200);
         cvReleaseImage( &img_8uc3 );
         cvReleaseImage( &img_edge );
+#ifndef IMAGE
         cvReleaseImage( &img_8uc1 );
+#endif
     }
     cvDestroyWindow( argv[0] );
     return 0;
